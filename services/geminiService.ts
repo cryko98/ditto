@@ -17,47 +17,31 @@ IMPORTANT RULES:
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
-// URLs for the reference image
-// 1. Primary: Raw GitHub User Content (Needs file to be in main branch public repo)
-const PRIMARY_IMAGE_URL = "https://raw.githubusercontent.com/cryko98/ditto/main/ditto.png";
-// 2. Fallback: Original Twitter Image via CORS Proxy
-const FALLBACK_IMAGE_URL = "https://corsproxy.io/?https%3A%2F%2Fpbs.twimg.com%2Fmedia%2FG7Dc0n8XcAABioM%3Fformat%3Djpg%26name%3Dmedium";
+// STABLE IMAGE SOURCE: Official PokeAPI GitHub Raw (CORS Friendly)
+// This is the exact same official artwork but hosted on a server that allows external access.
+const DITTO_REF_IMAGE_URL = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/132.png";
 
-// Helper to convert URL to Base64 with fallback logic
+// Helper to convert URL to Base64
 async function fetchImageBase64(): Promise<string | null> {
-  // Helper internal function to try fetching
-  const tryFetch = async (url: string) => {
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) throw new Error(`Status: ${response.status}`);
-    return response.blob();
-  };
-
-  let blob: Blob;
-
   try {
-    // Attempt 1: GitHub Raw
-    blob = await tryFetch(PRIMARY_IMAGE_URL);
+    const response = await fetch(DITTO_REF_IMAGE_URL, { mode: 'cors' });
+    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+        resolve(base64String.split(',')[1]);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   } catch (err) {
-    console.warn("GitHub image load failed, trying fallback...", err);
-    try {
-      // Attempt 2: Twitter Proxy
-      blob = await tryFetch(FALLBACK_IMAGE_URL);
-    } catch (fallbackErr) {
-      console.error("All image fetch attempts failed.");
-      return null; // Return null to signal fallback to text-only mode
-    }
+    console.error("Image fetch failed:", err);
+    return null; // Return null to trigger text-only fallback
   }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-      resolve(base64String.split(',')[1]);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
 
 export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
@@ -119,12 +103,12 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
 
     if (base64Image) {
       // OPTION A: Reference Image Available
-      console.log("Generating with reference image...");
+      // console.log("Generating with reference image...");
       contentsPayload = {
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg', 
+              mimeType: 'image/png', 
               data: base64Image
             }
           },
@@ -135,7 +119,7 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
       };
     } else {
       // OPTION B: Fallback to Text Description (Resilience)
-      console.log("Reference image failed. Generating with text description...");
+      // console.log("Reference image failed. Generating with text description...");
       contentsPayload = {
         parts: [
           {
