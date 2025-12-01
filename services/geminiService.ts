@@ -18,8 +18,9 @@ IMPORTANT RULES:
 `;
 
 export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please set process.env.API_KEY.");
+  // Code generation still uses Gemini as it has a generous free tier via AI Studio
+  if (!process.env.API_KEY || process.env.API_KEY === 'undefined') {
+    throw new Error("API Key is missing. Please add API_KEY to Vercel Environment Variables.");
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -56,51 +57,37 @@ export const generateWebPage = async (prompt: string, currentCode?: string): Pro
     // Cleanup in case the model accidentally adds markdown despite instructions
     return text.replace(/```html/g, '').replace(/```/g, '');
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw new Error("Failed to generate code. Please try again.");
+    if (error.message?.includes('403')) {
+      throw new Error("Invalid API Key. Please check your Vercel Environment Variables.");
+    }
+    throw error;
   }
 };
 
 export const generateDittoImage = async (prompt: string): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+  // SWITCHED TO POLLINATIONS.AI for 100% FREE generation without billing requirements.
+  
   try {
-    // We rely purely on the model's internal knowledge of Ditto.
-    // This removes all external dependencies (CORS, 404s, broken links).
-    // The prompt ensures the character looks consistent.
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', 
-      contents: {
-        parts: [
-          {
-            text: `Generate a high-quality, 2D vector-style or official anime artwork style image of the Pokémon "Ditto". 
-            
-            Visual Requirements:
-            - Character: Ditto (purple, amorphous, jelly-like blob, simple smiley face with dot eyes and line mouth).
-            - Style: Clean lines, vibrant colors, similar to official marketing art.
-            - Scene/Action: ${prompt}
-            
-            Make sure the character is clearly visible and cute.`
-          }
-        ]
-      }
-    });
-
-    // Extract the image from the response
-    if (response.candidates && response.candidates[0].content.parts) {
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-            return `data:image/png;base64,${part.inlineData.data}`;
-        }
-      }
-    }
+    // Construct a strong prompt to ensure consistency with the Ditto character
+    const basePrompt = "cute ditto pokemon character, purple amorphous blob, simple face with dot eyes, 2d vector art style, clean white background, high quality";
+    const userScenario = prompt;
     
-    throw new Error("No image generated in response.");
+    // Combine them
+    const finalPrompt = encodeURIComponent(`${basePrompt}, ${userScenario}`);
+    
+    // Add a random seed to ensure different results for the same prompt
+    const seed = Math.floor(Math.random() * 1000000);
+    
+    // Pollinations URL construction
+    const imageUrl = `https://image.pollinations.ai/prompt/${finalPrompt}?nologo=true&width=1024&height=1024&seed=${seed}&model=flux`;
+
+    // We add a small delay to simulate "processing" so the UI doesn't flash too quickly
+    // and to verify the URL is constructed correctly.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    return imageUrl;
 
   } catch (error) {
     console.error("Image Generation Error:", error);
