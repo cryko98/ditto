@@ -72,14 +72,24 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const imagePrompt = `Generate a high-quality, 2D vector-style or official anime artwork style image of the Pokémon "Ditto". 
-            
-  Visual Requirements:
-  - Character: Ditto (purple, amorphous, jelly-like blob, simple smiley face with dot eyes and line mouth).
-  - Style: Clean lines, vibrant colors, similar to official marketing art.
-  - Scene/Action: ${prompt}
-  
-  Make sure the character is clearly visible and cute.`;
+  // Strictly engineered prompt to ensure the character looks exactly like the official Pokémon
+  const imagePrompt = `
+    Official Nintendo Pokémon artwork of Ditto, drawn in the style of Ken Sugimori.
+    
+    CHARACTER DETAILS (STRICT):
+    - A simple, smooth, amorphous pink-purple jelly blob.
+    - Face: Two small, simple black dots for eyes. A single thin line for a mouth.
+    - NO nose, NO ears, NO complex limbs, NO fur, NO shading details.
+    - The shape should be soft and fluid.
+    
+    SETTING/ACTION:
+    ${prompt}
+    
+    STYLE:
+    - 2D Vector art, Cel-shaded.
+    - White background (unless scene requires otherwise).
+    - High fidelity, cute, clean lines.
+  `;
 
   try {
     // Attempt 1: Try Gemini 2.5 Flash Image (Multimodal)
@@ -104,7 +114,6 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
     console.warn("Gemini 2.5 Flash Image failed, trying fallback to Imagen 3...", error);
 
     // Attempt 2: Fallback to Imagen 3 (Dedicated Image Generation Model)
-    // This often works if the multimodal model fails or has permission issues.
     try {
        const imagenResponse = await ai.models.generateImages({
         model: 'imagen-3.0-generate-001',
@@ -126,7 +135,7 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
        console.error("Fallback Image Generation Error:", fallbackError);
        // Throw a helpful error message for the user
        if (fallbackError.message?.includes('403') || error.message?.includes('403')) {
-          throw new Error("Permission Denied (403). Your API Key might need Billing enabled to generate images.");
+          throw new Error("Permission Denied (403). Your API Key needs Billing enabled to generate images.");
        }
        throw new Error("Failed to generate image. Please try again later.");
     }
