@@ -96,9 +96,15 @@ export default function App() {
         }]);
       }
     } catch (err: any) {
+      // Improved error message display to help user debug Vercel issues
+      const errorMessage = err.message || "Unknown error occurred.";
+      console.error(err);
+      
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: isImageMode ? "Sorry, I couldn't generate the image. Please try again." : "Sorry, I ran into an error generating the code. Please try again.", 
+        content: isImageMode 
+          ? `Image generation failed: ${errorMessage}` 
+          : `Code generation failed: ${errorMessage}`, 
         type: 'text' 
       }]);
     } finally {
@@ -340,29 +346,31 @@ export default function App() {
             </div>
 
             {/* Image Tab */}
-            <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] flex items-center justify-center p-8 transition-opacity duration-300 ${activeTab === TabOption.IMAGE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-               {generatedImageUrl ? (
-                 <div className="relative max-w-full max-h-full flex flex-col items-center gap-4">
-                    <img 
-                      src={generatedImageUrl} 
-                      alt="Generated Result" 
-                      className="max-w-full max-h-[80vh] rounded-lg shadow-2xl border border-white/10" 
-                    />
-                    <a 
-                      href={generatedImageUrl} 
-                      download="ditto-generated.png"
-                      className="flex items-center gap-2 px-6 py-2 bg-ditto-DEFAULT hover:bg-fuchsia-600 text-white rounded-full transition-all shadow-lg font-medium"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download Image
-                    </a>
-                 </div>
-               ) : (
-                 <div className="text-gray-500 flex flex-col items-center gap-4">
-                    <ImageIcon className="w-16 h-16 opacity-20" />
-                    <p>No image generated yet. Switch to "Images" mode in the chat to create one!</p>
-                 </div>
-               )}
+            <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] overflow-y-auto transition-opacity duration-300 ${activeTab === TabOption.IMAGE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
+               <div className="min-h-full flex flex-col items-center justify-center p-8">
+                   {generatedImageUrl ? (
+                     <div className="flex flex-col items-center gap-6 max-w-full">
+                        <img 
+                          src={generatedImageUrl} 
+                          alt="Generated Result" 
+                          className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-2xl border border-white/10" 
+                        />
+                        <a 
+                          href={generatedImageUrl} 
+                          download="ditto-generated.png"
+                          className="flex items-center gap-2 px-6 py-3 bg-ditto-DEFAULT hover:bg-fuchsia-600 text-white rounded-full transition-all shadow-lg font-medium hover:scale-105 active:scale-95"
+                        >
+                          <Download className="w-5 h-5" />
+                          Download Image
+                        </a>
+                     </div>
+                   ) : (
+                     <div className="text-gray-500 flex flex-col items-center gap-4">
+                        <ImageIcon className="w-16 h-16 opacity-20" />
+                        <p>No image generated yet. Switch to "Images" mode in the chat to create one!</p>
+                     </div>
+                   )}
+               </div>
             </div>
 
           </div>
