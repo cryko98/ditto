@@ -18,7 +18,6 @@ IMPORTANT RULES:
 `;
 
 export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
-  // Code generation still uses Gemini as it has a generous free tier via AI Studio
   if (!process.env.API_KEY || process.env.API_KEY === 'undefined') {
     throw new Error("API Key is missing. Please add API_KEY to Vercel Environment Variables.");
   }
@@ -67,30 +66,69 @@ export const generateWebPage = async (prompt: string, currentCode?: string): Pro
 };
 
 export const generateDittoImage = async (prompt: string): Promise<string> => {
-  // SWITCHED TO POLLINATIONS.AI for 100% FREE generation without billing requirements.
+  if (!process.env.API_KEY || process.env.API_KEY === 'undefined') {
+    throw new Error("API Key is missing. Please add API_KEY to Vercel Environment Variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+  const imagePrompt = `Generate a high-quality, 2D vector-style or official anime artwork style image of the Pokémon "Ditto". 
+            
+  Visual Requirements:
+  - Character: Ditto (purple, amorphous, jelly-like blob, simple smiley face with dot eyes and line mouth).
+  - Style: Clean lines, vibrant colors, similar to official marketing art.
+  - Scene/Action: ${prompt}
   
+  Make sure the character is clearly visible and cute.`;
+
   try {
-    // Construct a strong prompt to ensure consistency with the Ditto character
-    const basePrompt = "cute ditto pokemon character, purple amorphous blob, simple face with dot eyes, 2d vector art style, clean white background, high quality";
-    const userScenario = prompt;
-    
-    // Combine them
-    const finalPrompt = encodeURIComponent(`${basePrompt}, ${userScenario}`);
-    
-    // Add a random seed to ensure different results for the same prompt
-    const seed = Math.floor(Math.random() * 1000000);
-    
-    // Pollinations URL construction
-    const imageUrl = `https://image.pollinations.ai/prompt/${finalPrompt}?nologo=true&width=1024&height=1024&seed=${seed}&model=flux`;
+    // Attempt 1: Try Gemini 2.5 Flash Image (Multimodal)
+    console.log("Attempting image gen with gemini-2.5-flash-image...");
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image', 
+      contents: {
+        parts: [{ text: imagePrompt }]
+      }
+    });
 
-    // We add a small delay to simulate "processing" so the UI doesn't flash too quickly
-    // and to verify the URL is constructed correctly.
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (response.candidates && response.candidates[0].content.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
+    }
+    throw new Error("No image data in first model response.");
 
-    return imageUrl;
+  } catch (error: any) {
+    console.warn("Gemini 2.5 Flash Image failed, trying fallback to Imagen 3...", error);
 
-  } catch (error) {
-    console.error("Image Generation Error:", error);
-    throw new Error("Failed to generate image. Please try again.");
+    // Attempt 2: Fallback to Imagen 3 (Dedicated Image Generation Model)
+    // This often works if the multimodal model fails or has permission issues.
+    try {
+       const imagenResponse = await ai.models.generateImages({
+        model: 'imagen-3.0-generate-001',
+        prompt: imagePrompt,
+        config: {
+          numberOfImages: 1,
+          outputMimeType: 'image/jpeg'
+        }
+       });
+       
+       const imageBytes = imagenResponse.generatedImages?.[0]?.image?.imageBytes;
+       if (imageBytes) {
+         return `data:image/jpeg;base64,${imageBytes}`;
+       }
+
+       throw new Error("Imagen 3 also failed to return an image.");
+
+    } catch (fallbackError: any) {
+       console.error("Fallback Image Generation Error:", fallbackError);
+       // Throw a helpful error message for the user
+       if (fallbackError.message?.includes('403') || error.message?.includes('403')) {
+          throw new Error("Permission Denied (403). Your API Key might need Billing enabled to generate images.");
+       }
+       throw new Error("Failed to generate image. Please try again later.");
+    }
   }
 };
