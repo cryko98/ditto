@@ -18,16 +18,16 @@ IMPORTANT RULES:
 `;
 
 // URLs for the reference image
-// 1. Primary: Raw GitHub User Content (CORS friendly, works if file is in repo)
+// 1. Primary: Raw GitHub User Content (Needs file to be in main branch public repo)
 const PRIMARY_IMAGE_URL = "https://raw.githubusercontent.com/cryko98/ditto/main/ditto.png";
 // 2. Fallback: Original Twitter Image via CORS Proxy
 const FALLBACK_IMAGE_URL = "https://corsproxy.io/?https%3A%2F%2Fpbs.twimg.com%2Fmedia%2FG7Dc0n8XcAABioM%3Fformat%3Djpg%26name%3Dmedium";
 
 // Helper to convert URL to Base64 with fallback logic
-async function fetchImageBase64(): Promise<string> {
+async function fetchImageBase64(): Promise<string | null> {
   // Helper internal function to try fetching
   const tryFetch = async (url: string) => {
-    const response = await fetch(url);
+    const response = await fetch(url, { cache: 'no-store' });
     if (!response.ok) throw new Error(`Status: ${response.status}`);
     return response.blob();
   };
@@ -36,7 +36,6 @@ async function fetchImageBase64(): Promise<string> {
 
   try {
     // Attempt 1: GitHub Raw
-    console.log("Attempting to load image from GitHub...");
     blob = await tryFetch(PRIMARY_IMAGE_URL);
   } catch (err) {
     console.warn("GitHub image load failed, trying fallback...", err);
@@ -45,7 +44,7 @@ async function fetchImageBase64(): Promise<string> {
       blob = await tryFetch(FALLBACK_IMAGE_URL);
     } catch (fallbackErr) {
       console.error("All image fetch attempts failed.");
-      throw new Error("Could not load Ditto reference image from GitHub or Fallback.");
+      return null; // Return null to signal fallback to text-only mode
     }
   }
 
@@ -114,13 +113,14 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    // 1. Fetch the reference image bytes (with robust fallback)
+    // 1. Try to fetch the reference image
     const base64Image = await fetchImageBase64();
+    let contentsPayload: any;
 
-    // 2. Call the Image Generation/Editing model
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', 
-      contents: {
+    if (base64Image) {
+      // OPTION A: Reference Image Available
+      console.log("Generating with reference image...");
+      contentsPayload = {
         parts: [
           {
             inlineData: {
@@ -132,7 +132,23 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
             text: `Using this character (Ditto) as a reference, generate a high-quality 2D cartoon/anime style image of it performing the following action or in the following scene: "${prompt}". Keep the character recognizable as a purple jelly blob with a simple face.`
           }
         ]
-      }
+      };
+    } else {
+      // OPTION B: Fallback to Text Description (Resilience)
+      console.log("Reference image failed. Generating with text description...");
+      contentsPayload = {
+        parts: [
+          {
+            text: `Generate a high-quality 2D cartoon/anime style image of a character named "Ditto". Ditto is a purple, amorphous, jelly-like blob with a very simple face consisting of two small dot eyes and a line mouth. Scene/Action: "${prompt}". Make sure it looks like the Pokémon Ditto.`
+          }
+        ]
+      };
+    }
+
+    // 2. Call the model
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image', 
+      contents: contentsPayload
     });
 
     // 3. Extract the image from the response
