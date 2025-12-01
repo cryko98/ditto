@@ -17,33 +17,6 @@ IMPORTANT RULES:
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
-// STABLE IMAGE SOURCE: Official PokeAPI GitHub Raw (CORS Friendly)
-// This is the exact same official artwork but hosted on a server that allows external access.
-const DITTO_REF_IMAGE_URL = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/132.png";
-
-// Helper to convert URL to Base64
-async function fetchImageBase64(): Promise<string | null> {
-  try {
-    const response = await fetch(DITTO_REF_IMAGE_URL, { mode: 'cors' });
-    if (!response.ok) throw new Error(`Status: ${response.status}`);
-    
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-        resolve(base64String.split(',')[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    console.error("Image fetch failed:", err);
-    return null; // Return null to trigger text-only fallback
-  }
-}
-
 export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key is missing. Please set process.env.API_KEY.");
@@ -97,45 +70,28 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    // 1. Try to fetch the reference image
-    const base64Image = await fetchImageBase64();
-    let contentsPayload: any;
-
-    if (base64Image) {
-      // OPTION A: Reference Image Available
-      // console.log("Generating with reference image...");
-      contentsPayload = {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/png', 
-              data: base64Image
-            }
-          },
-          {
-            text: `Using this character (Ditto) as a reference, generate a high-quality 2D cartoon/anime style image of it performing the following action or in the following scene: "${prompt}". Keep the character recognizable as a purple jelly blob with a simple face.`
-          }
-        ]
-      };
-    } else {
-      // OPTION B: Fallback to Text Description (Resilience)
-      // console.log("Reference image failed. Generating with text description...");
-      contentsPayload = {
-        parts: [
-          {
-            text: `Generate a high-quality 2D cartoon/anime style image of a character named "Ditto". Ditto is a purple, amorphous, jelly-like blob with a very simple face consisting of two small dot eyes and a line mouth. Scene/Action: "${prompt}". Make sure it looks like the Pokémon Ditto.`
-          }
-        ]
-      };
-    }
-
-    // 2. Call the model
+    // We rely purely on the model's internal knowledge of Ditto.
+    // This removes all external dependencies (CORS, 404s, broken links).
+    // The prompt ensures the character looks consistent.
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-image', 
-      contents: contentsPayload
+      contents: {
+        parts: [
+          {
+            text: `Generate a high-quality, 2D vector-style or official anime artwork style image of the Pokémon "Ditto". 
+            
+            Visual Requirements:
+            - Character: Ditto (purple, amorphous, jelly-like blob, simple smiley face with dot eyes and line mouth).
+            - Style: Clean lines, vibrant colors, similar to official marketing art.
+            - Scene/Action: ${prompt}
+            
+            Make sure the character is clearly visible and cute.`
+          }
+        ]
+      }
     });
 
-    // 3. Extract the image from the response
+    // Extract the image from the response
     if (response.candidates && response.candidates[0].content.parts) {
       for (const part of response.candidates[0].content.parts) {
         if (part.inlineData) {
