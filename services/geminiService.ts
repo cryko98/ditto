@@ -17,31 +17,48 @@ IMPORTANT RULES:
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
-// Reference local image uploaded to the repository
-const DITTO_REF_IMAGE_URL = "/ditto.png";
+// URLs for the reference image
+// 1. Primary: Raw GitHub User Content (CORS friendly, works if file is in repo)
+const PRIMARY_IMAGE_URL = "https://raw.githubusercontent.com/cryko98/ditto/main/ditto.png";
+// 2. Fallback: Original Twitter Image via CORS Proxy
+const FALLBACK_IMAGE_URL = "https://corsproxy.io/?https%3A%2F%2Fpbs.twimg.com%2Fmedia%2FG7Dc0n8XcAABioM%3Fformat%3Djpg%26name%3Dmedium";
 
-// Helper to convert URL to Base64
-async function urlToBase64(url: string): Promise<string> {
-  try {
+// Helper to convert URL to Base64 with fallback logic
+async function fetchImageBase64(): Promise<string> {
+  // Helper internal function to try fetching
+  const tryFetch = async (url: string) => {
     const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    if (!response.ok) throw new Error(`Status: ${response.status}`);
+    return response.blob();
+  };
+
+  let blob: Blob;
+
+  try {
+    // Attempt 1: GitHub Raw
+    console.log("Attempting to load image from GitHub...");
+    blob = await tryFetch(PRIMARY_IMAGE_URL);
+  } catch (err) {
+    console.warn("GitHub image load failed, trying fallback...", err);
+    try {
+      // Attempt 2: Twitter Proxy
+      blob = await tryFetch(FALLBACK_IMAGE_URL);
+    } catch (fallbackErr) {
+      console.error("All image fetch attempts failed.");
+      throw new Error("Could not load Ditto reference image from GitHub or Fallback.");
     }
-    const blob = await response.blob();
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-        resolve(base64String.split(',')[1]);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch (error) {
-    console.error("Error fetching reference image:", error);
-    throw new Error("Failed to load local Ditto reference image. Make sure 'ditto.png' is in the public folder.");
   }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+      resolve(base64String.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
@@ -97,8 +114,8 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    // 1. Fetch the reference image bytes from local file
-    const base64Image = await urlToBase64(DITTO_REF_IMAGE_URL);
+    // 1. Fetch the reference image bytes (with robust fallback)
+    const base64Image = await fetchImageBase64();
 
     // 2. Call the Image Generation/Editing model
     const response = await ai.models.generateContent({
@@ -107,7 +124,7 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg', // Assuming ditto.png is actually a png, but model is flexible. Ideally use image/png if strictly png.
+              mimeType: 'image/jpeg', 
               data: base64Image
             }
           },
@@ -131,6 +148,6 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
 
   } catch (error) {
     console.error("Image Generation Error:", error);
-    throw new Error("Failed to generate image. Try a different prompt or check if ditto.png exists.");
+    throw new Error("Failed to generate image. Please try again.");
   }
 };
