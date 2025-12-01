@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { generateWebPage, generateDittoImage } from './services/geminiService';
 import { DittoLogo } from './components/DittoLogo';
 import { TabOption, ChatMessage } from './types';
-import { Code, Eye, Zap, AlertCircle, Copy, Check, Send, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Code, Eye, Zap, AlertCircle, Copy, Check, Send, Image as ImageIcon, Sparkles, Download } from 'lucide-react';
 
 const DEFAULT_CODE = `<!DOCTYPE html>
 <html>
@@ -48,6 +48,7 @@ export default function App() {
     { role: 'assistant', content: "Hi! I'm Ditto. Describe the website or app you want me to build!", type: 'text' }
   ]);
   const [code, setCode] = useState<string>(DEFAULT_CODE);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabOption>(TabOption.PREVIEW);
   const [isCaCopied, setIsCaCopied] = useState(false);
@@ -76,10 +77,12 @@ export default function App() {
       if (isImageMode) {
         // Image Generation Mode
         const imageUrl = await generateDittoImage(userMessage);
+        setGeneratedImageUrl(imageUrl);
+        setActiveTab(TabOption.IMAGE);
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: imageUrl, 
-          type: 'image' 
+          content: "I've generated a new image based on your request. Check the Image tab on the right!", 
+          type: 'text' 
         }]);
       } else {
         // Code Generation Mode
@@ -191,20 +194,7 @@ export default function App() {
                     }
                   `}
                 >
-                  {msg.type === 'image' ? (
-                     <div className="space-y-2">
-                       <img src={msg.content} alt="Generated Ditto" className="rounded-lg w-full h-auto border border-white/10" />
-                       <a 
-                         href={msg.content} 
-                         download="ditto-gen.png" 
-                         className="block text-center text-xs text-ditto-light hover:text-white hover:underline py-1"
-                       >
-                         Download Image
-                       </a>
-                     </div>
-                  ) : (
-                     <p className="px-1.5 text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                  )}
+                  <p className="px-1.5 text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 </div>
               </div>
             ))}
@@ -299,6 +289,17 @@ export default function App() {
                 <Code className="w-4 h-4" />
                 Code
               </button>
+              <button
+                onClick={() => setActiveTab(TabOption.IMAGE)}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                  activeTab === TabOption.IMAGE 
+                    ? 'bg-ditto-bg text-white shadow-md' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <ImageIcon className="w-4 h-4" />
+                Image
+              </button>
             </div>
             
             {activeTab === TabOption.PREVIEW && (
@@ -337,6 +338,33 @@ export default function App() {
                   </pre>
               </div>
             </div>
+
+            {/* Image Tab */}
+            <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] flex items-center justify-center p-8 transition-opacity duration-300 ${activeTab === TabOption.IMAGE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
+               {generatedImageUrl ? (
+                 <div className="relative max-w-full max-h-full flex flex-col items-center gap-4">
+                    <img 
+                      src={generatedImageUrl} 
+                      alt="Generated Result" 
+                      className="max-w-full max-h-[80vh] rounded-lg shadow-2xl border border-white/10" 
+                    />
+                    <a 
+                      href={generatedImageUrl} 
+                      download="ditto-generated.png"
+                      className="flex items-center gap-2 px-6 py-2 bg-ditto-DEFAULT hover:bg-fuchsia-600 text-white rounded-full transition-all shadow-lg font-medium"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download Image
+                    </a>
+                 </div>
+               ) : (
+                 <div className="text-gray-500 flex flex-col items-center gap-4">
+                    <ImageIcon className="w-16 h-16 opacity-20" />
+                    <p>No image generated yet. Switch to "Images" mode in the chat to create one!</p>
+                 </div>
+               )}
+            </div>
+
           </div>
         </main>
       </div>

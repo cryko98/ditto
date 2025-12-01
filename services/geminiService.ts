@@ -17,12 +17,16 @@ IMPORTANT RULES:
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
-const DITTO_REF_IMAGE_URL = "https://pbs.twimg.com/media/G7Dc0n8XcAABioM?format=jpg&name=medium";
+// Reference local image uploaded to the repository
+const DITTO_REF_IMAGE_URL = "/ditto.png";
 
 // Helper to convert URL to Base64
 async function urlToBase64(url: string): Promise<string> {
   try {
     const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -36,7 +40,7 @@ async function urlToBase64(url: string): Promise<string> {
     });
   } catch (error) {
     console.error("Error fetching reference image:", error);
-    throw new Error("Failed to load Ditto reference image.");
+    throw new Error("Failed to load local Ditto reference image. Make sure 'ditto.png' is in the public folder.");
   }
 }
 
@@ -93,20 +97,17 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
-    // 1. Fetch the reference image bytes
-    // Note: We need a proxy or direct access. Assuming standard fetch works for this URL or it's allowed.
-    // If CORS blocks it, we might need a local fallback asset, but let's try fetch first.
+    // 1. Fetch the reference image bytes from local file
     const base64Image = await urlToBase64(DITTO_REF_IMAGE_URL);
 
     // 2. Call the Image Generation/Editing model
-    // We pass the reference image and ask it to place the character in a new scene
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image', // Using the image capable model
+      model: 'gemini-2.5-flash-image', 
       contents: {
         parts: [
           {
             inlineData: {
-              mimeType: 'image/jpeg',
+              mimeType: 'image/jpeg', // Assuming ditto.png is actually a png, but model is flexible. Ideally use image/png if strictly png.
               data: base64Image
             }
           },
@@ -130,6 +131,6 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
 
   } catch (error) {
     console.error("Image Generation Error:", error);
-    throw new Error("Failed to generate image. Try a different prompt.");
+    throw new Error("Failed to generate image. Try a different prompt or check if ditto.png exists.");
   }
 };
