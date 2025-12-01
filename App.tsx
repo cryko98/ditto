@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { generateWebPage } from './services/geminiService';
+import { generateWebPage, generateDittoImage } from './services/geminiService';
 import { DittoLogo } from './components/DittoLogo';
 import { TabOption, ChatMessage } from './types';
-import { Code, Eye, Zap, AlertCircle, Copy, Check, Send } from 'lucide-react';
+import { Code, Eye, Zap, AlertCircle, Copy, Check, Send, Image as ImageIcon, Sparkles } from 'lucide-react';
 
 const DEFAULT_CODE = `<!DOCTYPE html>
 <html>
@@ -45,13 +45,15 @@ const XLogo = ({ className }: { className?: string }) => (
 export default function App() {
   const [input, setInput] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: "Hi! I'm Ditto. Describe the website or app you want me to build!" }
+    { role: 'assistant', content: "Hi! I'm Ditto. Describe the website or app you want me to build!", type: 'text' }
   ]);
   const [code, setCode] = useState<string>(DEFAULT_CODE);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabOption>(TabOption.PREVIEW);
   const [isCaCopied, setIsCaCopied] = useState(false);
   const [isCodeCopied, setIsCodeCopied] = useState(false);
+  const [isImageMode, setIsImageMode] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -67,19 +69,35 @@ export default function App() {
     
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setMessages(prev => [...prev, { role: 'user', content: userMessage, type: 'text' }]);
     setIsLoading(true);
-    
-    // Switch to preview automatically when generating to show the result immediately
-    setActiveTab(TabOption.PREVIEW);
 
     try {
-      // Pass the current code so the model can modify it
-      const generatedCode = await generateWebPage(userMessage, code);
-      setCode(generatedCode);
-      setMessages(prev => [...prev, { role: 'assistant', content: "I've updated the code based on your request! Let me know if you want any changes." }]);
+      if (isImageMode) {
+        // Image Generation Mode
+        const imageUrl = await generateDittoImage(userMessage);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: imageUrl, 
+          type: 'image' 
+        }]);
+      } else {
+        // Code Generation Mode
+        setActiveTab(TabOption.PREVIEW);
+        const generatedCode = await generateWebPage(userMessage, code);
+        setCode(generatedCode);
+        setMessages(prev => [...prev, { 
+          role: 'assistant', 
+          content: "I've updated the code based on your request! Let me know if you want any changes.", 
+          type: 'text' 
+        }]);
+      }
     } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I ran into an error generating the code. Please try again." }]);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: isImageMode ? "Sorry, I couldn't generate the image. Please try again." : "Sorry, I ran into an error generating the code. Please try again.", 
+        type: 'text' 
+      }]);
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +171,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight text-white">Ditto Agent</h1>
-              <p className="text-xs text-ditto-light opacity-80">Frontend Engineer</p>
+              <p className="text-xs text-ditto-light opacity-80">Frontend & Image Gen</p>
             </div>
           </div>
 
@@ -166,14 +184,27 @@ export default function App() {
               >
                 <div 
                   className={`
-                    max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm
+                    max-w-[85%] rounded-2xl p-2.5 shadow-sm
                     ${msg.role === 'user' 
                       ? 'bg-ditto-DEFAULT text-white rounded-tr-sm' 
                       : 'bg-ditto-bg border border-ditto-dark text-gray-200 rounded-tl-sm'
                     }
                   `}
                 >
-                  {msg.content}
+                  {msg.type === 'image' ? (
+                     <div className="space-y-2">
+                       <img src={msg.content} alt="Generated Ditto" className="rounded-lg w-full h-auto border border-white/10" />
+                       <a 
+                         href={msg.content} 
+                         download="ditto-gen.png" 
+                         className="block text-center text-xs text-ditto-light hover:text-white hover:underline py-1"
+                       >
+                         Download Image
+                       </a>
+                     </div>
+                  ) : (
+                     <p className="px-1.5 text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -191,12 +222,29 @@ export default function App() {
 
           {/* Input Area */}
           <div className="p-4 bg-ditto-surface border-t border-ditto-dark shrink-0">
-            <div className="relative flex items-end gap-2 bg-ditto-bg p-2 rounded-xl border border-ditto-dark focus-within:border-ditto-light/50 focus-within:ring-1 focus-within:ring-ditto-light/30 transition-all shadow-inner">
+            <div className="flex gap-2 mb-2">
+              <button 
+                 onClick={() => setIsImageMode(false)}
+                 className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-medium transition-all ${!isImageMode ? 'bg-ditto-DEFAULT text-white shadow-md' : 'bg-ditto-bg/50 text-gray-400 hover:bg-ditto-bg hover:text-white'}`}
+              >
+                <Code className="w-3.5 h-3.5" />
+                Code
+              </button>
+              <button 
+                 onClick={() => setIsImageMode(true)}
+                 className={`flex-1 flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-medium transition-all ${isImageMode ? 'bg-pink-500 text-white shadow-md' : 'bg-ditto-bg/50 text-gray-400 hover:bg-ditto-bg hover:text-white'}`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Images
+              </button>
+            </div>
+
+            <div className={`relative flex items-end gap-2 bg-ditto-bg p-2 rounded-xl border transition-all shadow-inner ${isImageMode ? 'border-pink-500/50 ring-1 ring-pink-500/20' : 'border-ditto-dark focus-within:border-ditto-light/50 focus-within:ring-1 focus-within:ring-ditto-light/30'}`}>
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Make the background blue..."
+                placeholder={isImageMode ? "Ditto eating pizza..." : "Make the background blue..."}
                 className="w-full bg-transparent border-none text-sm text-white placeholder-gray-500 focus:ring-0 resize-none max-h-32 min-h-[44px] py-3 pl-2"
                 style={{ height: 'auto', overflow: 'hidden' }}
                 rows={1}
@@ -208,15 +256,17 @@ export default function App() {
                   mb-1 p-2 rounded-lg transition-all
                   ${isLoading || !input.trim() 
                     ? 'bg-ditto-dark/50 text-gray-500 cursor-not-allowed' 
-                    : 'bg-ditto-DEFAULT text-white hover:bg-fuchsia-600 active:scale-95 shadow-lg'
+                    : isImageMode 
+                        ? 'bg-pink-500 text-white hover:bg-pink-600 active:scale-95 shadow-lg'
+                        : 'bg-ditto-DEFAULT text-white hover:bg-fuchsia-600 active:scale-95 shadow-lg'
                   }
                 `}
               >
-                <Send className="w-4 h-4" />
+                {isImageMode ? <Sparkles className="w-4 h-4" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
             <div className="text-[10px] text-center text-gray-500 mt-2">
-              Ditto can make mistakes. Check the code.
+              {isImageMode ? "Generating images may take a few seconds." : "Ditto can make mistakes. Check the code."}
             </div>
           </div>
         </aside>

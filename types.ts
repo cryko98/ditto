@@ -11,4 +11,5 @@ export enum TabOption {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  type?: 'text' | 'image';
 }
