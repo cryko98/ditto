@@ -12,7 +12,7 @@ const DEFAULT_CODE = `<!DOCTYPE html>
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            height: 100vh; 
+            min-height: 100vh; 
             margin: 0; 
             background: #f3e8ff; 
             color: #6b21a8;
@@ -105,7 +105,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-ditto-bg text-gray-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] w-full bg-ditto-bg text-gray-100 overflow-hidden font-sans">
       
       {/* Global Header */}
       <header className="h-16 flex-none bg-ditto-bg border-b border-ditto-dark flex items-center justify-between px-4 md:px-6 relative z-30 shadow-md">

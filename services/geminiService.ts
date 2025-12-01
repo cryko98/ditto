@@ -13,6 +13,7 @@ IMPORTANT RULES:
 - Return ONLY the raw HTML code. 
 - Do NOT wrap the code in markdown blocks (no \`\`\`html ... \`\`\`). 
 - Do NOT add explanations or text outside the HTML.
+- Always use 'min-height: 100vh' for the body instead of 'height: 100vh' to allow scrolling on mobile or smaller screens.
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
@@ -35,6 +36,7 @@ export const generateWebPage = async (prompt: string, currentCode?: string): Pro
     INSTRUCTIONS: 
     Return the FULLY updated HTML file incorporating the user's changes. 
     Do not return just the diff. Return the complete working HTML file.
+    Remember to use min-height: 100vh for the body to prevent cutting off content.
     `;
   }
 
