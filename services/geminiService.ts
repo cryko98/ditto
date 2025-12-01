@@ -16,17 +16,32 @@ IMPORTANT RULES:
 - If the user asks for something unsafe, politely refuse within a valid HTML page displaying the error.
 `;
 
-export const generateWebPage = async (prompt: string): Promise<string> => {
+export const generateWebPage = async (prompt: string, currentCode?: string): Promise<string> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key is missing. Please set process.env.API_KEY.");
   }
 
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+  // If there is existing code, we ask the model to modify it
+  let fullPrompt = prompt;
+  if (currentCode && !currentCode.startsWith('<!-- No code')) {
+    fullPrompt = `
+    Here is the current HTML code:
+    ${currentCode}
+
+    USER REQUEST: ${prompt}
+
+    INSTRUCTIONS: 
+    Return the FULLY updated HTML file incorporating the user's changes. 
+    Do not return just the diff. Return the complete working HTML file.
+    `;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: fullPrompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         temperature: 0.7, 

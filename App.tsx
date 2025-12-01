@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { generateWebPage } from './services/geminiService';
 import { DittoLogo } from './components/DittoLogo';
-import { TabOption } from './types';
-import { Code, Eye, Zap, AlertCircle, Copy, Check } from 'lucide-react';
+import { TabOption, ChatMessage } from './types';
+import { Code, Eye, Zap, AlertCircle, Copy, Check, Send } from 'lucide-react';
 
 const DEFAULT_CODE = `<!DOCTYPE html>
 <html>
@@ -31,7 +31,7 @@ const DEFAULT_CODE = `<!DOCTYPE html>
 <body>
     <div class="container">
         <h1>Hi! I'm Ditto.</h1>
-        <p>Tell me what to build in the box above!</p>
+        <p>Tell me what to build in the chat on the left!</p>
     </div>
 </body>
 </html>`;
@@ -43,35 +43,51 @@ const XLogo = ({ className }: { className?: string }) => (
 );
 
 export default function App() {
-  const [prompt, setPrompt] = useState<string>('');
+  const [input, setInput] = useState<string>('');
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', content: "Hi! I'm Ditto. Describe the website you want me to build!" }
+  ]);
   const [code, setCode] = useState<string>(DEFAULT_CODE);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabOption>(TabOption.PREVIEW);
-  const [error, setError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
   
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
     
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
-    setError(null);
     
     // Switch to preview automatically when generating to show the result immediately
     setActiveTab(TabOption.PREVIEW);
 
     try {
-      const generatedCode = await generateWebPage(prompt);
+      // Pass the current code so the model can modify it
+      const generatedCode = await generateWebPage(userMessage, code);
       setCode(generatedCode);
+      setMessages(prev => [...prev, { role: 'assistant', content: "I've updated the code based on your request! Let me know if you want any changes." }]);
     } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+      setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I ran into an error generating the code. Please try again." }]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      handleGenerate();
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
@@ -120,80 +136,89 @@ export default function App() {
       {/* Main App Container */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
       
-        {/* Sidebar / Input Area */}
-        <aside className="w-full md:w-1/3 lg:w-1/4 bg-ditto-surface border-r border-ditto-dark flex flex-col relative z-10 shadow-xl">
-          <div className="p-6 flex flex-col items-center border-b border-ditto-dark bg-ditto-bg/50 backdrop-blur-sm">
-            <div className="relative group cursor-pointer">
-              <div className="absolute inset-0 bg-ditto-light opacity-20 blur-xl rounded-full group-hover:opacity-40 transition-opacity duration-500"></div>
-              <DittoLogo className="w-24 h-24 md:w-32 md:h-32 relative z-10 animate-blob" />
+        {/* Sidebar / Chat Area */}
+        <aside className="w-full md:w-1/3 lg:w-1/4 bg-ditto-surface border-r border-ditto-dark flex flex-col relative z-20 shadow-xl h-[40vh] md:h-auto">
+          {/* Sidebar Header */}
+          <div className="p-4 flex items-center gap-3 border-b border-ditto-dark bg-ditto-bg/50 backdrop-blur-sm shrink-0">
+            <div className="relative group w-10 h-10">
+              <div className="absolute inset-0 bg-ditto-light opacity-20 blur-md rounded-full"></div>
+              <DittoLogo className="w-10 h-10 relative z-10" />
             </div>
-            <h1 className="text-2xl font-bold mt-4 tracking-tight text-white">Ditto</h1>
-            <p className="text-ditto-light text-sm text-center mt-1 opacity-80">
-              Transform ideas into code using Ditto Agent
-            </p>
+            <div>
+              <h1 className="text-lg font-bold tracking-tight text-white">Ditto Agent</h1>
+              <p className="text-xs text-ditto-light opacity-80">Frontend Engineer</p>
+            </div>
           </div>
 
-          <div className="flex-1 p-4 flex flex-col gap-4 overflow-y-auto">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="prompt" className="text-sm font-semibold text-ditto-light uppercase tracking-wider">
-                Describe your app
-              </label>
-              <textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g., A landing page for a coffee shop with a hero image, a menu section, and a contact form with a dark theme."
-                className="w-full h-48 bg-ditto-bg border border-ditto-dark rounded-xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-ditto-light/50 focus:border-transparent transition-all placeholder-gray-500 resize-none shadow-inner"
-              />
-            </div>
-
-            <button
-              onClick={handleGenerate}
-              disabled={isLoading || !prompt.trim()}
-              className={`
-                group relative w-full py-4 rounded-xl font-bold text-lg shadow-lg flex items-center justify-center gap-2 overflow-hidden transition-all transform
-                ${isLoading || !prompt.trim() 
-                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-ditto-DEFAULT to-fuchsia-600 text-white hover:scale-[1.02] active:scale-[0.98] animate-jelly hover:shadow-ditto-DEFAULT/50'
-                }
-              `}
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Generating...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-5 h-5 group-hover:fill-current" />
-                  <span>Transform!</span>
-                </>
-              )}
-            </button>
-            
-            <div className="text-xs text-center text-gray-500 mt-2">
-              Tip: Press <kbd className="bg-ditto-bg px-1 rounded border border-ditto-dark">Ctrl + Enter</kbd> to generate
-            </div>
-            
-            {error && (
-              <div className="mt-4 p-3 bg-red-900/50 border border-red-500/50 rounded-lg flex items-start gap-2 text-xs text-red-200">
-                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                <span>{error}</span>
+          {/* Chat History */}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 scrollbar-thin scrollbar-thumb-ditto-dark scrollbar-track-transparent">
+            {messages.map((msg, idx) => (
+              <div 
+                key={idx} 
+                className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div 
+                  className={`
+                    max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm
+                    ${msg.role === 'user' 
+                      ? 'bg-ditto-DEFAULT text-white rounded-tr-sm' 
+                      : 'bg-ditto-bg border border-ditto-dark text-gray-200 rounded-tl-sm'
+                    }
+                  `}
+                >
+                  {msg.content}
+                </div>
               </div>
+            ))}
+            {isLoading && (
+               <div className="flex justify-start">
+                  <div className="bg-ditto-bg border border-ditto-dark px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
+                    <div className="w-2 h-2 bg-ditto-light rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-2 h-2 bg-ditto-light rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-2 h-2 bg-ditto-light rounded-full animate-bounce"></div>
+                  </div>
+               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
-          
-          <div className="p-4 border-t border-ditto-dark text-center">
-              <p className="text-xs text-gray-500">Powered by Ditto Agent</p>
+
+          {/* Input Area */}
+          <div className="p-4 bg-ditto-surface border-t border-ditto-dark shrink-0">
+            <div className="relative flex items-end gap-2 bg-ditto-bg p-2 rounded-xl border border-ditto-dark focus-within:border-ditto-light/50 focus-within:ring-1 focus-within:ring-ditto-light/30 transition-all shadow-inner">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Make the background blue..."
+                className="w-full bg-transparent border-none text-sm text-white placeholder-gray-500 focus:ring-0 resize-none max-h-32 min-h-[44px] py-3 pl-2"
+                style={{ height: 'auto', overflow: 'hidden' }}
+                rows={1}
+              />
+              <button
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className={`
+                  mb-1 p-2 rounded-lg transition-all
+                  ${isLoading || !input.trim() 
+                    ? 'bg-ditto-dark/50 text-gray-500 cursor-not-allowed' 
+                    : 'bg-ditto-DEFAULT text-white hover:bg-fuchsia-600 active:scale-95 shadow-lg'
+                  }
+                `}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="text-[10px] text-center text-gray-500 mt-2">
+              Ditto can make mistakes. Check the code.
+            </div>
           </div>
         </aside>
 
         {/* Main Content / Output Area */}
-        <main className="flex-1 flex flex-col h-full relative bg-gray-900">
+        <main className="flex-1 flex flex-col h-full relative bg-gray-900 overflow-hidden">
           
           {/* Toolbar */}
-          <div className="h-14 border-b border-gray-800 bg-gray-900 flex items-center justify-between px-4">
+          <div className="h-14 border-b border-gray-800 bg-gray-900 flex items-center justify-between px-4 shrink-0">
             <div className="flex bg-gray-800 p-1 rounded-lg">
               <button
                 onClick={() => setActiveTab(TabOption.PREVIEW)}
@@ -220,7 +245,7 @@ export default function App() {
             </div>
             
             {activeTab === TabOption.PREVIEW && (
-              <div className="text-xs text-gray-500 flex items-center gap-1">
+              <div className="hidden md:flex text-xs text-gray-500 items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                 Live Preview
               </div>
