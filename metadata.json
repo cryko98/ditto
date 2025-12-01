@@ -1,0 +1,5 @@
+{
+  "name": "Ditto Code Generator",
+  "description": "A purple, jelly-themed AI code generator that creates HTML/CSS/JS web pages from text descriptions using Ditto Agent.",
+  "requestFramePermissions": []
+}
