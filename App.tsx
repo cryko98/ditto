@@ -45,12 +45,13 @@ const XLogo = ({ className }: { className?: string }) => (
 export default function App() {
   const [input, setInput] = useState<string>('');
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: "Hi! I'm Ditto. Describe the website you want me to build!" }
+    { role: 'assistant', content: "Hi! I'm Ditto. Describe the website or app you want me to build!" }
   ]);
   const [code, setCode] = useState<string>(DEFAULT_CODE);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabOption>(TabOption.PREVIEW);
-  const [isCopied, setIsCopied] = useState(false);
+  const [isCaCopied, setIsCaCopied] = useState(false);
+  const [isCodeCopied, setIsCodeCopied] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -93,8 +94,14 @@ export default function App() {
 
   const handleCopyCa = () => {
     navigator.clipboard.writeText("6VKDRsckuBSk3rFnsvoHV9hrPKnzNHRSCfrS91Cupump");
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    setIsCaCopied(true);
+    setTimeout(() => setIsCaCopied(false), 2000);
+  };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(code);
+    setIsCodeCopied(true);
+    setTimeout(() => setIsCodeCopied(false), 2000);
   };
 
   return (
@@ -114,7 +121,7 @@ export default function App() {
             >
                 <span className="opacity-50 font-bold uppercase select-none">ca:</span>
                 <span className="truncate max-w-[100px] md:max-w-none select-all">6VKDRsckuBSk3rFnsvoHV9hrPKnzNHRSCfrS91Cupump</span>
-                {isCopied ? (
+                {isCaCopied ? (
                   <Check className="w-3.5 h-3.5 text-green-400" />
                 ) : (
                   <Copy className="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" />
@@ -266,10 +273,19 @@ export default function App() {
             </div>
 
             {/* Code Tab */}
-            <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] transition-opacity duration-300 overflow-auto ${activeTab === TabOption.CODE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-              <pre className="p-4 text-sm font-mono text-gray-300 leading-relaxed">
-                <code>{code}</code>
-              </pre>
+            <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] transition-opacity duration-300 ${activeTab === TabOption.CODE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
+              <div className="relative w-full h-full overflow-auto">
+                 <button
+                    onClick={handleCopyCode}
+                    className="absolute top-4 right-4 p-2 bg-gray-700/80 hover:bg-gray-600 text-white rounded-md shadow-lg transition-all z-20 backdrop-blur-sm border border-gray-600"
+                    title="Copy Code"
+                  >
+                    {isCodeCopied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <pre className="p-4 pt-12 text-sm font-mono text-gray-300 leading-relaxed">
+                    <code>{code}</code>
+                  </pre>
+              </div>
             </div>
           </div>
         </main>
