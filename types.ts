@@ -5,7 +5,8 @@ export interface GeneratedResult {
 
 export enum TabOption {
   PREVIEW = 'PREVIEW',
-  CODE = 'CODE'
+  CODE = 'CODE',
+  IMAGE = 'IMAGE'
 }
 
 export interface ChatMessage {
