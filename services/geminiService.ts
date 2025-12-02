@@ -141,3 +141,29 @@ export const generateDittoImage = async (prompt: string): Promise<string> => {
     }
   }
 };
+
+export const generateBullishTweet = async (imageContext: string): Promise<string> => {
+  if (!process.env.API_KEY) return "";
+
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `
+        Write a short, viral, extremely bullish crypto twitter post about the coin "$DITTO" on Solana.
+        The tweet should be related to this scene: "${imageContext}".
+        
+        Requirements:
+        - Use emojis 🚀💎
+        - Include hashtags: #Solana #DITTO #Memecoin
+        - Mention "CA: 6VKDRsckuBSk3rFnsvoHV9hrPKnzNHRSCfrS91Cupump"
+        - Keep it under 200 characters.
+        - Tone: Hype, fun, degen.
+      `
+    });
+    return response.text || "LFG $DITTO! 🚀 #Solana";
+  } catch (e) {
+    return "Check out this $DITTO art! 🚀 #Solana";
+  }
+};

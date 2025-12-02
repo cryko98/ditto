@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { generateWebPage, generateDittoImage } from './services/geminiService';
+import { generateWebPage, generateDittoImage, generateBullishTweet } from './services/geminiService';
 import { DittoLogo } from './components/DittoLogo';
 import { TabOption, ChatMessage } from './types';
-import { Code, Eye, Zap, AlertCircle, Copy, Check, Send, Image as ImageIcon, Sparkles, Download } from 'lucide-react';
+import { Code, Eye, Zap, AlertCircle, Copy, Check, Send, Image as ImageIcon, Sparkles, Download, Share2, ClipboardCopy, AlertTriangle } from 'lucide-react';
 
 const DEFAULT_CODE = `<!DOCTYPE html>
 <html>
@@ -49,10 +49,12 @@ export default function App() {
   ]);
   const [code, setCode] = useState<string>(DEFAULT_CODE);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [tweetText, setTweetText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<TabOption>(TabOption.PREVIEW);
   const [isCaCopied, setIsCaCopied] = useState(false);
   const [isCodeCopied, setIsCodeCopied] = useState(false);
+  const [isImageCopied, setIsImageCopied] = useState(false);
   const [isImageMode, setIsImageMode] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -79,9 +81,14 @@ export default function App() {
         const imageUrl = await generateDittoImage(userMessage);
         setGeneratedImageUrl(imageUrl);
         setActiveTab(TabOption.IMAGE);
+        
+        // Generate tweet text concurrently
+        const tweet = await generateBullishTweet(userMessage);
+        setTweetText(tweet);
+
         setMessages(prev => [...prev, { 
           role: 'assistant', 
-          content: "I've generated a new image based on your request. Check the Image tab on the right!", 
+          content: "I've generated a new image based on your request. Check the Image tab to download and share!", 
           type: 'text' 
         }]);
       } else {
@@ -96,7 +103,6 @@ export default function App() {
         }]);
       }
     } catch (err: any) {
-      // Improved error message display to help user debug Vercel issues
       const errorMessage = err.message || "Unknown error occurred.";
       console.error(err);
       
@@ -129,6 +135,31 @@ export default function App() {
     navigator.clipboard.writeText(code);
     setIsCodeCopied(true);
     setTimeout(() => setIsCodeCopied(false), 2000);
+  };
+
+  const handleCopyImage = async () => {
+    if (!generatedImageUrl) return;
+    try {
+      // Fetch the image as a blob
+      const response = await fetch(generatedImageUrl);
+      const blob = await response.blob();
+      
+      // Copy to clipboard
+      await navigator.clipboard.write([
+        new ClipboardItem({ [blob.type]: blob })
+      ]);
+      
+      setIsImageCopied(true);
+      setTimeout(() => setIsImageCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy image:", error);
+      alert("Failed to copy image to clipboard. Please use Download instead.");
+    }
+  };
+
+  const handleShareTweet = () => {
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -347,22 +378,65 @@ export default function App() {
 
             {/* Image Tab */}
             <div className={`absolute inset-0 w-full h-full bg-[#1e1e1e] overflow-y-auto transition-opacity duration-300 ${activeTab === TabOption.IMAGE ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-               <div className="min-h-full flex flex-col items-center justify-center p-8">
+               <div className="min-h-full flex flex-col items-center justify-center p-8 pb-32">
                    {generatedImageUrl ? (
-                     <div className="flex flex-col items-center gap-6 max-w-full">
+                     <div className="flex flex-col items-center gap-6 w-full max-w-lg">
                         <img 
                           src={generatedImageUrl} 
                           alt="Generated Result" 
-                          className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-2xl border border-white/10" 
+                          className="max-w-full max-h-[50vh] object-contain rounded-lg shadow-2xl border border-white/10" 
                         />
-                        <a 
-                          href={generatedImageUrl} 
-                          download="ditto-generated.png"
-                          className="flex items-center gap-2 px-6 py-3 bg-ditto-DEFAULT hover:bg-fuchsia-600 text-white rounded-full transition-all shadow-lg font-medium hover:scale-105 active:scale-95"
-                        >
-                          <Download className="w-5 h-5" />
-                          Download Image
-                        </a>
+                        
+                        <div className="flex gap-3 w-full">
+                           <button 
+                            onClick={handleCopyImage}
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-all shadow-lg font-medium active:scale-95"
+                          >
+                            {isImageCopied ? <Check className="w-5 h-5 text-green-400" /> : <ClipboardCopy className="w-5 h-5" />}
+                            {isImageCopied ? "Copied" : "Copy Image"}
+                          </button>
+                           <a 
+                            href={generatedImageUrl} 
+                            download="ditto-generated.png"
+                            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-ditto-DEFAULT hover:bg-fuchsia-600 text-white rounded-xl transition-all shadow-lg font-medium hover:scale-105 active:scale-95"
+                          >
+                            <Download className="w-5 h-5" />
+                            Download
+                          </a>
+                        </div>
+
+                        {/* Tweet Preview Card */}
+                        <div className="w-full bg-gray-800 rounded-xl p-4 border border-gray-700 shadow-xl">
+                           <div className="flex items-center gap-2 mb-3 text-gray-400 text-xs uppercase font-bold tracking-wider">
+                              <XLogo className="w-4 h-4" />
+                              Tweet Preview
+                           </div>
+                           <textarea 
+                              value={tweetText}
+                              onChange={(e) => setTweetText(e.target.value)}
+                              className="w-full bg-gray-900/50 border border-gray-700 rounded-lg p-3 text-sm text-gray-200 placeholder-gray-500 focus:ring-1 focus:ring-ditto-light focus:border-ditto-light transition-all resize-none min-h-[100px]"
+                           />
+                           
+                           {/* Prominent Warning */}
+                           <div className="mt-3 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
+                              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                              <div className="text-xs text-amber-200">
+                                 <strong className="block text-amber-500 mb-1">IMAGE NOT ATTACHED!</strong>
+                                 X (Twitter) does not allow us to attach images automatically. You must <strong className="text-white underline decoration-amber-500">Copy</strong> or <strong className="text-white underline decoration-amber-500">Download</strong> the image above and paste it into the tweet yourself!
+                              </div>
+                           </div>
+
+                           <div className="flex items-center justify-end">
+                              <button 
+                                onClick={handleShareTweet}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-white text-black hover:bg-gray-200 rounded-full font-black text-sm transition-all shadow-lg hover:scale-105 active:scale-95"
+                              >
+                                <Share2 className="w-4 h-4" />
+                                Post on X
+                              </button>
+                           </div>
+                        </div>
+
                      </div>
                    ) : (
                      <div className="text-gray-500 flex flex-col items-center gap-4">
