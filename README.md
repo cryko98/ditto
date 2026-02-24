@@ -1,48 +1,42 @@
 # 🤖 Ditto — Self-Building App Agent (Vercel)
 
-## 🚀 Deploy in 3 steps
+## 🚀 Deploy (3 lépés)
 
-### 1. GitHub-ra feltöltés
+### 1. GitHub
 ```bash
-git init
-git add .
-git commit -m "init"
-git remote add origin https://github.com/YOUR_USER/ditto.git
+git init && git add . && git commit -m "init"
+git remote add origin https://github.com/USER/ditto.git
 git push -u origin main
 ```
 
-### 2. Vercel import
-[vercel.com](https://vercel.com) → **Add New Project** → importáld a repot → **Deploy**
+### 2. Vercel
+[vercel.com](https://vercel.com) → **Add New Project** → repo kiválasztása → **Deploy**
 
 ### 3. Environment Variable
-Vercel Dashboard → Project → **Settings → Environment Variables**:
+**Settings → Environment Variables:**
 
 | Name | Value |
 |------|-------|
 | `ANTHROPIC_API_KEY` | `sk-ant-...` |
 
-**Redeploy** a változó mentése után.
+➡ Mentés után: **Redeploy**
 
 ---
 
-## 📁 Struktúra
-
-```
-ditto-vercel/
-├── api/
-│   └── index.py       ← Flask app + Ditto agent (Vercel Python serverless)
-├── public/
-│   └── index.html     ← Frontend UI
-├── requirements.txt   ← flask, anthropic
-├── vercel.json        ← Routing config
-└── .gitignore
-```
-
-## 💻 Helyi fejlesztés
-
+## 💻 Helyi futtatás
 ```bash
 pip install flask anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
-cd api && python index.py
+python api/index.py
 # → http://localhost:5000
+```
+
+## 📁 Struktúra
+```
+ditto/
+├── api/
+│   └── index.py      ← Flask app + agent + frontend HTML (minden egyben)
+├── requirements.txt  ← flask, anthropic
+├── vercel.json       ← Vercel routing
+└── .gitignore
 ```
