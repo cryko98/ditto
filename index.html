@@ -1,0 +1,311 @@
+import os
+import json
+import uuid
+import threading
+import time
+from flask import Flask, request, jsonify, send_from_directory
+from anthropic import Anthropic
+
+app = Flask(__name__, static_folder="../public", static_url_path="")
+
+# ─── In-memory session store ─────────────────────────────────────────────────
+# { session_id: { "logs": [...], "status": "idle|building|done|error", "result": {...} } }
+sessions = {}
+sessions_lock = threading.Lock()
+
+client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+# ─── Tools definition ────────────────────────────────────────────────────────
+TOOLS = [
+    {
+        "name": "create_file",
+        "description": "Create or overwrite a file. Path must start with templates/, static/, or routes/.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path, e.g. templates/index.html or static/style.css"},
+                "content": {"type": "string", "description": "Full file content"}
+            },
+            "required": ["path", "content"]
+        }
+    },
+    {
+        "name": "read_file",
+        "description": "Read an existing file's content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "File path to read"}
+            },
+            "required": ["path"]
+        }
+    },
+    {
+        "name": "list_files",
+        "description": "List all created files so far.",
+        "input_schema": {
+            "type": "object",
+            "properties": {}
+        }
+    },
+    {
+        "name": "task_completed",
+        "description": "Call this when the app is fully built and all files are created.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Brief summary of what was built"}
+            },
+            "required": ["summary"]
+        }
+    }
+]
+
+SYSTEM_PROMPT = """You are Ditto, a self-building web application agent.
+
+Your job: build a complete, working single-page web application based on the user's description.
+
+IMPORTANT CONSTRAINTS (this runs in a browser preview environment):
+- You are building a STATIC web app — pure HTML, CSS, JavaScript only
+- NO server-side code, NO Python, NO Flask routes needed
+- Everything must work client-side in the browser
+- Use vanilla JS or include CDN libraries (Bootstrap, jQuery, Chart.js, etc.)
+
+REQUIRED FILES:
+1. templates/index.html — The main app (REQUIRED, this is what gets rendered)
+2. static/style.css — Custom styles (optional but recommended)
+3. static/app.js — JavaScript logic (optional, or inline in HTML)
+
+RULES:
+1. Build a FULLY FUNCTIONAL app — no placeholders, no TODOs, no "coming soon"
+2. Use Bootstrap 5 (https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css) for layout
+3. Make it visually polished and actually usable
+4. All interactivity via JavaScript (localStorage for persistence if needed)
+5. The index.html must be self-contained and work immediately when opened
+6. Start by calling create_file for templates/index.html, then any additional files
+7. When ALL files are created and the app is complete, call task_completed()
+
+GOOD APP EXAMPLES:
+- Todo app: full CRUD with localStorage
+- Calculator: functional with keyboard support  
+- Notes app: create/edit/delete with markdown preview
+- Budget tracker: add expenses, show charts with Chart.js
+
+Build the app step by step. Start NOW."""
+
+
+def add_log(session_id, message, level="info"):
+    with sessions_lock:
+        if session_id in sessions:
+            sessions[session_id]["logs"].append({
+                "message": message,
+                "level": level,
+                "ts": time.time()
+            })
+
+
+def run_agent(session_id, description):
+    """Run the Ditto agent in a background thread."""
+    files = {}  # path -> content
+
+    def tool_create_file(path, content):
+        allowed = ["templates/", "static/", "routes/"]
+        if not any(path.startswith(p) for p in allowed):
+            return f"Error: path must start with templates/, static/, or routes/"
+        files[path] = content
+        add_log(session_id, f"📄 Created: {path} ({len(content)} chars)", "success")
+        return f"File created: {path}"
+
+    def tool_read_file(path):
+        if path in files:
+            return files[path]
+        return f"Error: file '{path}' not found"
+
+    def tool_list_files():
+        if not files:
+            return "No files created yet."
+        return "\n".join(files.keys())
+
+    messages = [
+        {"role": "user", "content": f"Build this app: {description}"}
+    ]
+
+    add_log(session_id, f"🚀 Agent started", "info")
+    add_log(session_id, f"📝 Building: {description}", "info")
+
+    max_iterations = 15
+    iteration = 0
+
+    try:
+        while iteration < max_iterations:
+            iteration += 1
+            add_log(session_id, f"🔄 Thinking... (step {iteration})", "info")
+
+            response = client.messages.create(
+                model="claude-opus-4-6",
+                max_tokens=4096,
+                system=SYSTEM_PROMPT,
+                tools=TOOLS,
+                messages=messages
+            )
+
+            # Add assistant response to history
+            messages.append({"role": "assistant", "content": response.content})
+
+            # Process content blocks
+            tool_calls_made = False
+            tool_results = []
+            completed = False
+
+            for block in response.content:
+                if block.type == "text" and block.text.strip():
+                    snippet = block.text[:150].replace('\n', ' ')
+                    add_log(session_id, f"🤖 {snippet}{'...' if len(block.text) > 150 else ''}", "agent")
+
+                elif block.type == "tool_use":
+                    tool_calls_made = True
+                    fname = block.name
+                    args = block.input
+
+                    add_log(session_id, f"🔧 {fname}({', '.join(f'{k}={repr(v)[:40]}' for k,v in args.items() if k != 'content')})", "tool")
+
+                    if fname == "create_file":
+                        result = tool_create_file(args["path"], args["content"])
+                    elif fname == "read_file":
+                        result = tool_read_file(args["path"])
+                    elif fname == "list_files":
+                        result = tool_list_files()
+                        add_log(session_id, f"   → {result}", "info")
+                    elif fname == "task_completed":
+                        summary = args.get("summary", "App built!")
+                        add_log(session_id, f"🎉 Done: {summary}", "success")
+                        completed = True
+                        result = "Task marked as completed."
+                    else:
+                        result = f"Unknown tool: {fname}"
+
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": str(result)
+                    })
+
+            # Add tool results to messages
+            if tool_results:
+                messages.append({"role": "user", "content": tool_results})
+
+            if completed:
+                break
+
+            # Stop if no tool calls and stop reason is end_turn
+            if not tool_calls_made and response.stop_reason == "end_turn":
+                add_log(session_id, "✅ Agent finished", "success")
+                break
+
+        # Build result
+        # Assemble final HTML — inject CSS and JS into index.html
+        index_html = files.get("templates/index.html", "")
+        css = files.get("static/style.css", "")
+        js = files.get("static/app.js", "")
+
+        if not index_html:
+            add_log(session_id, "⚠️ No index.html was created!", "warning")
+            index_html = "<html><body><h1>Build failed — no index.html created</h1></body></html>"
+
+        # Inject CSS and JS if they exist as separate files
+        if css and "<style>" not in index_html:
+            index_html = index_html.replace("</head>", f"<style>{css}</style>\n</head>")
+        if js and "<script" not in index_html.split("</body>")[-1]:
+            index_html = index_html.replace("</body>", f"<script>{js}</script>\n</body>")
+
+        with sessions_lock:
+            if session_id in sessions:
+                sessions[session_id]["status"] = "done"
+                sessions[session_id]["result"] = {
+                    "html": index_html,
+                    "files": list(files.keys())
+                }
+
+        add_log(session_id, f"✅ Build complete! Files: {', '.join(files.keys())}", "success")
+
+    except Exception as e:
+        import traceback
+        err = traceback.format_exc()
+        add_log(session_id, f"❌ Error: {str(e)}", "error")
+        with sessions_lock:
+            if session_id in sessions:
+                sessions[session_id]["status"] = "error"
+                sessions[session_id]["error"] = str(e)
+
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return send_from_directory("../public", "index.html")
+
+
+@app.route("/api/build", methods=["POST"])
+def api_build():
+    data = request.get_json()
+    description = (data or {}).get("description", "").strip()
+    if not description:
+        return jsonify({"error": "No description provided"}), 400
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return jsonify({"error": "ANTHROPIC_API_KEY not set"}), 500
+
+    session_id = str(uuid.uuid4())
+    with sessions_lock:
+        sessions[session_id] = {
+            "status": "building",
+            "logs": [],
+            "result": None
+        }
+
+    # Cleanup old sessions (keep last 20)
+    with sessions_lock:
+        if len(sessions) > 20:
+            oldest = sorted(sessions.keys())[:-20]
+            for k in oldest:
+                del sessions[k]
+
+    thread = threading.Thread(target=run_agent, args=(session_id, description), daemon=True)
+    thread.start()
+
+    return jsonify({"session_id": session_id})
+
+
+@app.route("/api/poll/<session_id>")
+def api_poll(session_id):
+    """Polling endpoint — returns new logs since offset and current status."""
+    offset = int(request.args.get("offset", 0))
+
+    with sessions_lock:
+        session = sessions.get(session_id)
+
+    if not session:
+        return jsonify({"error": "Session not found"}), 404
+
+    logs = session["logs"][offset:]
+    status = session["status"]
+    result = session.get("result")
+
+    return jsonify({
+        "logs": logs,
+        "status": status,
+        "offset": offset + len(logs),
+        "result": result if status == "done" else None
+    })
+
+
+@app.route("/api/result/<session_id>")
+def api_result(session_id):
+    with sessions_lock:
+        session = sessions.get(session_id)
+    if not session:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify({
+        "status": session["status"],
+        "result": session.get("result")
+    })
